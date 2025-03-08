@@ -13,7 +13,16 @@
 #pragma once
 
 #include <string>
+
+// Error handling
+#if __has_include("core/error/error_macros.h") && __has_include("core/string/ustring.h")
+#define GODOT
+#include "core/error/error_macros.h"
+#include "core/string/ustring.h"
+#else
 #include <stdexcept>
+#endif
+
 #include <utility>
 
 #if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || __cplusplus >= 201703L)
@@ -63,6 +72,7 @@ public:
     static constexpr bool add_filename_decorations = true;
     static constexpr bool no_filename_decorations = false;
 
+#ifndef GODOT
     /**
      *  This exception is raised when the library failed to load a dynamic library or a symbol
      *
@@ -92,6 +102,7 @@ public:
     public:
         explicit symbol_error(const std::string &message) : exception(message) {}
     };
+#endif
 
     dylib(const dylib&) = delete;
     dylib& operator=(const dylib&) = delete;
@@ -118,8 +129,12 @@ public:
      */
     ///@{
     dylib(const char *dir_path, const char *lib_name, bool decorations = add_filename_decorations) {
+#ifdef GODOT
+        ERR_FAIL_COND_MSG(!dir_path || !lib_name, "Null parameter");
+#else
         if (!dir_path || !lib_name)
             throw std::invalid_argument("Null parameter");
+#endif
 
         std::string final_name = lib_name;
         std::string final_path = dir_path;
@@ -132,8 +147,12 @@ public:
 
         m_handle = open((final_path + final_name).c_str());
 
+#ifdef GODOT
+        ERR_FAIL_COND_MSG(!m_handle, String("Could not load library \"") + String(final_path.data()) + String(final_name.data()) + "\"\n" + String(get_error_description().data()));
+#else
         if (!m_handle)
             throw load_error("Could not load library \"" + final_path + final_name + "\"\n" + get_error_description());
+#endif
     }
 
     dylib(const std::string &dir_path, const std::string &lib_name, bool decorations = add_filename_decorations)
@@ -178,15 +197,25 @@ public:
      *  @return a pointer to the requested symbol
      */
     native_symbol_type get_symbol(const char *symbol_name) const {
+#ifdef GODOT
+        ERR_FAIL_COND_V_MSG(!symbol_name || !m_handle, native_symbol_type(), "Null parameter");
+        ERR_FAIL_COND_V_MSG(!m_handle, native_symbol_type(), "The dynamic library handle is null");
+#else
         if (!symbol_name)
             throw std::invalid_argument("Null parameter");
         if (!m_handle)
             throw std::logic_error("The dynamic library handle is null");
+#endif
+
 
         auto symbol = locate_symbol(m_handle, symbol_name);
 
+#ifdef GODOT
+        ERR_FAIL_COND_V_MSG(symbol == nullptr, native_symbol_type(), String("Could not get symbol \"") + String(symbol_name) + "\"\n" + String(get_error_description().data()));
+#else
         if (symbol == nullptr)
             throw symbol_error("Could not get symbol \"" + std::string(symbol_name) + "\"\n" + get_error_description());
+#endif
         return symbol;
     }
 
